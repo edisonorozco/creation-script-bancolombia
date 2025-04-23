@@ -6,7 +6,16 @@
 
 **Consulta SQL:**
 ```sql
-
+    SELECT 
+        c.id_cliente,
+        c.nombre,
+        COUNT(ct.num_cuenta) AS numero_cuentas,
+        SUM(ct.saldo) AS saldo_total
+    FROM Cliente c
+    JOIN Cuenta ct ON c.id_cliente = ct.id_cliente
+    GROUP BY c.id_cliente, c.nombre
+    HAVING COUNT(ct.num_cuenta) > 1
+    ORDER BY saldo_total DESC;
 ```
 
 ## Enunciado 2: Comparativa entre depósitos y retiros por cliente
@@ -15,7 +24,16 @@
 
 **Consulta SQL:**
 ```sql
-
+    SELECT
+        c.id_cliente,
+        c.nombre,
+        COALESCE(SUM(CASE WHEN t.tipo_transaccion = 'deposito' THEN t.monto END), 0) AS total_depositos,
+        COALESCE(SUM(CASE WHEN t.tipo_transaccion = 'retiro' THEN t.monto END), 0) AS total_retiros
+    FROM Cliente c
+    JOIN Cuenta ct ON c.id_cliente = ct.id_cliente
+    JOIN Transaccion t ON ct.num_cuenta   = t.num_cuenta
+    GROUP BY c.id_cliente, c.nombre
+    ORDER BY c.id_cliente;
 ```
 
 ## Enunciado 3: Cuentas sin tarjetas asociadas
@@ -24,7 +42,13 @@
 
 **Consulta SQL:**
 ```sql
-
+    SELECT
+        ct.num_cuenta,
+        ct.id_cliente,
+        ct.saldo
+    FROM Cuenta ct
+    LEFT JOIN Tarjeta ta ON ct.num_cuenta = ta.num_cuenta
+    WHERE ta.num_cuenta IS NULL;
 ```
 
 ## Enunciado 4: Análisis de saldos promedio por tipo de cuenta y comportamiento transaccional
@@ -33,7 +57,18 @@
 
 **Consulta SQL:**
 ```sql
-
+    WITH cuentas_recientes AS (
+      SELECT DISTINCT num_cuenta
+      FROM Transaccion
+      WHERE fecha > now() - INTERVAL '30 days'
+    )
+    SELECT
+      c.tipo_cuenta,
+      ROUND(AVG(c.saldo), 2) AS saldo_promedio
+    FROM Cuenta c
+    INNER JOIN cuentas_recientes cr
+      ON c.num_cuenta = cr.num_cuenta
+    GROUP BY c.tipo_cuenta;
 ```
 
 ## Enunciado 5: Clientes con transferencias pero sin retiros en cajeros
@@ -42,5 +77,31 @@
 
 **Consulta SQL:**
 ```sql
-
+    SELECT
+        c.id_cliente,
+        c.nombre
+    FROM Cliente c
+    JOIN Cuenta ct ON c.id_cliente = ct.id_cliente
+    GROUP BY c.id_cliente, c.nombre
+    HAVING 
+        COUNT(
+          DISTINCT CASE 
+            WHEN EXISTS (
+              SELECT 1 FROM Transaccion t1
+              JOIN Transferencia tr ON t1.id_transaccion = tr.id_transaccion
+              WHERE t1.num_cuenta = ct.num_cuenta
+            ) THEN ct.num_cuenta
+          END
+        ) > 0
+      AND 
+        COUNT(
+          DISTINCT CASE 
+            WHEN EXISTS (
+              SELECT 1 FROM Transaccion t2
+              JOIN Retiro r ON t2.id_transaccion = r.id_transaccion
+              WHERE t2.num_cuenta = ct.num_cuenta
+                AND r.canal = 'cajero'
+            ) THEN ct.num_cuenta
+          END
+        ) = 0;
 ```
